@@ -29,10 +29,10 @@ Example
 > main-20240102183907-759ac82df558
 
 > `cd /path/to/gv; gv -a`  
-> Version: main-20240102183907-759ac82df558
-> Tag:
-> Branch: main
-> CommitTime: 20240102183907
+> Version: main-20240102183907-759ac82df558  
+> Tag:  
+> Branch: main  
+> CommitTime: 20240102183907  
 > CommitID: 759ac82df558dbabbc1890c108bdff9ebd5a8c79
 
 Ignore error log output

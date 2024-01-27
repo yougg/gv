@@ -2,13 +2,13 @@
 
 `gv` A standalone tool to get version information from git repository
 
-Install
+## Install
 
 ```shell
 go install github.com/yougg/gv@latest
 ```
 
-Usage
+## Usage
 
 ```shell
 # show help
@@ -23,7 +23,7 @@ gv -a -r /path/to/repo
 cd /path/to/repo && gv -a
 ```
 
-Example
+## Example
 
 > `gv -r /path/to/gv`  
 > main-20240102183907-759ac82df558
@@ -39,4 +39,54 @@ Ignore error log output
 
 ```shell
 gv 2> /dev/null
+```
+
+## Use Case
+
+add one source file `hello.go`
+
+```go
+package main
+
+import "fmt"
+
+var Version string
+
+func main() {
+        fmt.Println("Version:", Version)
+}
+```
+
+commit and build the source file with `gv` version info
+
+```shell
+git init
+git add hello.go
+git commit -m 'initial commit'
+go build -ldflags "-s -w -X main.Version=$(gv)" -o hello hello.go
+
+./hello
+# Version: main-20240102234342-eab50ab71e12
+gv -a
+# Version: v0.0.1
+# Tag:
+# Branch: main
+# CommitTime: 20240102234342
+# CommitID: eab50ab71e12b13b0030ecc05565dddc62f82af6
+```
+
+add tag then build and run again
+
+```shell
+git tag v0.0.1
+go build -ldflags "-s -w -X main.Version=$(gv)" -o hello hello.go
+
+./hello
+# Version: v0.0.1
+gv -a
+# Version: v0.0.1
+# Tag: v0.0.1
+# Branch: main
+# CommitTime: 20240102234342
+# CommitID: eab50ab71e12b13b0030ecc05565dddc62f82af6
 ```

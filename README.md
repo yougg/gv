@@ -68,7 +68,7 @@ go build -ldflags "-s -w -X main.Version=$(gv)" -o hello hello.go
 ./hello
 # Version: main-20240102234342-eab50ab71e12
 gv -a
-# Version: v0.0.1
+# Version: main-20240102234342-eab50ab71e12
 # Tag:
 # Branch: main
 # CommitTime: 20240102234342

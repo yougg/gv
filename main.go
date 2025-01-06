@@ -42,23 +42,23 @@ func init() {
 
 // read .git for version information
 func main() {
-	var gitroot string
+	var gitRoot string
 	if len(repo) > 0 {
-		gitroot = repo
-		if gitroot != `` && filepath.Base(gitroot) != `.git` {
-			gitroot = filepath.Join(gitroot, `.git`)
+		gitRoot = repo
+		if gitRoot != `` && filepath.Base(gitRoot) != `.git` {
+			gitRoot = filepath.Join(gitRoot, `.git`)
 		}
 	} else {
-		gitroot = getGitRoot()
+		gitRoot = getGitRoot()
 	}
-	if gitroot == `` || filepath.Base(gitroot) != `.git` {
-		slog.Error("can not find .git dir for repo", `path`, gitroot)
+	if gitRoot == `` || filepath.Base(gitRoot) != `.git` {
+		slog.Error("can not find .git dir for repo", `path`, gitRoot)
 		return
 	}
-	Version(gitroot)
+	Version(gitRoot)
 }
 
-func getGitRoot() (gitroot string) {
+func getGitRoot() (gitRoot string) {
 	wd, err := os.Getwd()
 	if err != nil {
 		slog.Error("get current working dir", `err`, err)
@@ -70,17 +70,17 @@ func getGitRoot() (gitroot string) {
 		return ``
 	}
 	for range [3]struct{}{} { // recursive find '.git' dir from './' or '../' or '../../'
-		filepath.Walk(wd, func(path string, info fs.FileInfo, err error) error {
+		_ = filepath.Walk(wd, func(path string, info fs.FileInfo, err error) error {
 			if !info.IsDir() {
 				return nil
 			}
 			if filepath.Base(path) == `.git` {
-				gitroot = path
+				gitRoot = path
 				return filepath.SkipAll
 			}
 			return nil
 		})
-		if gitroot != `` {
+		if gitRoot != `` {
 			break
 		}
 		wd = filepath.Dir(wd)
@@ -89,18 +89,22 @@ func getGitRoot() (gitroot string) {
 }
 
 // Version get version at HEAD
-func Version(gitroot string) {
-	tag, err := findTag(gitroot)
+func Version(gitRoot string) {
+	tag, err := findTag(gitRoot)
 	if err != nil {
 		slog.Error(`find tag`, `err`, err)
 		return
 	}
-	if tag != `` && !all {
+	var version string
+	if tag != `` {
+		version = tag
 		fmt.Print(tag)
-		return
+		if !all {
+			return
+		}
 	}
 
-	line, err := getLastLineWithSeek(gitroot)
+	line, err := getLastLineWithSeek(gitRoot)
 	if err != nil {
 		slog.Error("get last line", `err`, err)
 		return
@@ -115,17 +119,25 @@ func Version(gitroot string) {
 		slog.Error("get invalid commit ID/time", `commitID`, commitID, `commitTime`, commitTime)
 		return
 	}
-	branch, err := matchBranch(gitroot, commitID)
+	branch, err := matchBranch(gitRoot, commitID)
 	if err != nil {
 		slog.Error("match branch", `err`, err)
 		return
 	}
 	if branch == `` {
-		branch, err = findBranch(gitroot)
+		branch, err = findBranch(gitRoot)
 		if err != nil {
 			slog.Error("find branch", `err`, err)
 			return
 		}
+	}
+
+	var ref string
+	tag, err = nearliestTag(gitRoot, branch)
+	if err == nil && tag != `` {
+		ref = tag
+	} else {
+		ref = branch
 	}
 
 	timestamp, err := strconv.ParseInt(commitTime, 10, 64)
@@ -134,9 +146,8 @@ func Version(gitroot string) {
 		return
 	}
 	date := time.Unix(timestamp, 0).Format(`20060102150405`)
-	version := tag
 	if version == `` {
-		version = fmt.Sprintf("%s-%s-%s", branch, date, commitID[:12])
+		version = fmt.Sprintf("%s-%s-%s", ref, date, commitID[:12])
 	}
 
 	if all {
@@ -150,8 +161,8 @@ func Version(gitroot string) {
 	}
 }
 
-func getLastLineWithSeek(gitroot string) (string, error) {
-	file, err := os.Open(filepath.Join(gitroot, `logs/HEAD`))
+func getLastLineWithSeek(gitRoot string) (string, error) {
+	file, err := os.Open(filepath.Join(gitRoot, `logs/HEAD`))
 	if err != nil {
 		return "", fmt.Errorf("os open file: %w", err)
 	}
@@ -191,10 +202,10 @@ func getLastLineWithSeek(gitroot string) (string, error) {
 }
 
 // findTag get tag at HEAD if it exists
-func findTag(gitroot string) (tag string, err error) {
-	repo, err := git.PlainOpen(gitroot)
+func findTag(gitRoot string) (tag string, err error) {
+	repo, err := git.PlainOpen(gitRoot)
 	if err != nil {
-		err = fmt.Errorf("git open repository path %s: %w", filepath.Dir(gitroot), err)
+		err = fmt.Errorf("git open repository path %s: %w", filepath.Dir(gitRoot), err)
 		return
 	}
 	h, err := repo.Head()
@@ -220,7 +231,7 @@ func findTag(gitroot string) (tag string, err error) {
 	// fallback to run git command
 	//	1: git tag --points-at HEAD
 	//	2: git pack-refs; awk -F 'tags/' /$(git rev-parse HEAD)/'{print $2}' .git/packed-refs
-	//err = os.Chdir(filepath.Dir(gitroot))
+	//err = os.Chdir(filepath.Dir(gitRoot))
 	//if err != nil {
 	//	slog.Error("change dir", `err`, err)
 	//	return
@@ -234,10 +245,62 @@ func findTag(gitroot string) (tag string, err error) {
 	//tag = string(output)
 }
 
+// nearliestTag find nearliest tag from given branch
+func nearliestTag(gitRoot, branch string) (tag string, err error) {
+	repo, err := git.PlainOpen(gitRoot)
+	if err != nil {
+		err = fmt.Errorf("git open repository path %s: %w", filepath.Dir(gitRoot), err)
+		return
+	}
+	h, err := repo.Head()
+	if err != nil {
+		err = fmt.Errorf("get repository head: %w", err)
+		return
+	}
+	branches, err := repo.Branches()
+	if err != nil {
+		err = fmt.Errorf("get branches: %w", err)
+		return
+	}
+	tags, err := repo.Tags()
+	if err != nil {
+		err = fmt.Errorf("get repository tags: %w", err)
+		return
+	}
+	err = branches.ForEach(func(reference *plumbing.Reference) error {
+		commits, err := repo.Log(&git.LogOptions{From: reference.Hash()})
+		if err != nil {
+			return err
+		}
+		err = commits.ForEach(func(commit *object.Commit) error {
+			if commit.Hash == h.Hash() {
+				branch = reference.Name().Short()
+				return storer.ErrStop
+			}
+			return nil
+		})
+		if branch != `` {
+			err = tags.ForEach(func(reference *plumbing.Reference) error {
+				err = commits.ForEach(func(commit *object.Commit) error {
+					if reference.Hash() == commit.Hash {
+						tag = reference.Name().Short()
+						return storer.ErrStop
+					}
+					return nil
+				})
+				return err
+			})
+			return storer.ErrStop
+		}
+		return err
+	})
+	return
+}
+
 // matchBranch match branch by HEAD commit ID
-func matchBranch(gitroot, commitID string) (branch string, err error) {
+func matchBranch(gitRoot, commitID string) (branch string, err error) {
 	var content []byte
-	err = filepath.Walk(filepath.Join(gitroot, `refs/heads`), func(path string, info fs.FileInfo, err error) error {
+	err = filepath.Walk(filepath.Join(gitRoot, `refs/heads`), func(path string, info fs.FileInfo, err error) error {
 		if err != nil || info.IsDir() {
 			return nil
 		}
@@ -252,7 +315,7 @@ func matchBranch(gitroot, commitID string) (branch string, err error) {
 		return nil
 	})
 	if branch == `` {
-		content, err = os.ReadFile(filepath.Join(gitroot, `HEAD`))
+		content, err = os.ReadFile(filepath.Join(gitRoot, `HEAD`))
 		if err != nil {
 			err = fmt.Errorf("read file: %w", err)
 			return "", err
@@ -267,10 +330,10 @@ func matchBranch(gitroot, commitID string) (branch string, err error) {
 }
 
 // findBranch get branch where the HEAD belongs to.
-func findBranch(gitroot string) (branch string, err error) {
-	repo, err := git.PlainOpen(gitroot)
+func findBranch(gitRoot string) (branch string, err error) {
+	repo, err := git.PlainOpen(gitRoot)
 	if err != nil {
-		err = fmt.Errorf("git open repository path %s: %w", filepath.Dir(gitroot), err)
+		err = fmt.Errorf("git open repository path %s: %w", filepath.Dir(gitRoot), err)
 		return
 	}
 	h, err := repo.Head()

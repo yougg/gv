@@ -250,7 +250,7 @@ func findTag(gitRoot string) (tag string, err error) {
 	//tag = string(output)
 }
 
-// nearliestTag find nearliest tag from given branch
+// nearliestTag find the nearliest tag from given branch
 func nearliestTag(gitRoot, branch string) (tag string, err error) {
 	repo, err := git.PlainOpen(gitRoot)
 	if err != nil {

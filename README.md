@@ -18,18 +18,24 @@ gv -h
 gv -r /path/to/repo
 cd /path/to/repo && gv
 
-# get all version information from git repo
+# get full version information from git repo
 gv -a -r /path/to/repo
 cd /path/to/repo && gv -a
+
+# get version with branch name if no tag on HEAD
+gv -a -b -r /path/to/repo
 ```
 
 ## Example
 
 > `gv -r /path/to/gv`  
+> v0.0.0-20240102183907-759ac82df558
+
+> `gv -b -r /path/to/gv`  
 > main-20240102183907-759ac82df558
 
 > `cd /path/to/gv; gv -a`  
-> Version: main-20240102183907-759ac82df558  
+> Version: v0.0.0-20240102183907-759ac82df558  
 > Tag:  
 > Branch: main  
 > CommitTime: 20240102183907  
@@ -53,7 +59,7 @@ import "fmt"
 var Version string
 
 func main() {
-        fmt.Println("Version:", Version)
+	fmt.Println("Version:", Version)
 }
 ```
 
@@ -66,9 +72,9 @@ git commit -m 'initial commit'
 go build -ldflags "-s -w -X main.Version=$(gv)" -o hello hello.go
 
 ./hello
-# Version: main-20240102234342-eab50ab71e12
+# Version: v0.0.0-20240102234342-eab50ab71e12
 gv -a
-# Version: main-20240102234342-eab50ab71e12
+# Version: v0.0.0-20240102234342-eab50ab71e12
 # Tag:
 # Branch: main
 # CommitTime: 20240102234342

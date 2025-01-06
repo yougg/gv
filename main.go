@@ -22,12 +22,14 @@ import (
 )
 
 var (
-	all  bool
-	repo string
+	all   bool
+	showb bool
+	repo  string
 )
 
 func init() {
 	flag.BoolVar(&all, `a`, false, "show all version information")
+	flag.BoolVar(&showb, `b`, false, "show branch name instead of tag")
 	flag.StringVar(&repo, `r`, ``, "git repository path")
 	flag.Usage = func() {
 		fmt.Println("Usage: gv")
@@ -137,8 +139,10 @@ func Version(gitRoot string) {
 	tag, err = nearliestTag(gitRoot, branch)
 	if err == nil && tag != `` {
 		ref = tag
-	} else {
+	} else if showb {
 		ref = branch
+	} else {
+		ref = `v0.0.0`
 	}
 
 	timestamp, err := strconv.ParseInt(commitTime, 10, 64)

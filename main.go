@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -272,27 +273,38 @@ func nearliestTag(gitRoot, branch string) (tag string, err error) {
 		if err != nil {
 			return err
 		}
-		err = commits.ForEach(func(commit *object.Commit) error {
+		if err = commits.ForEach(func(commit *object.Commit) error {
 			if commit.Hash == h.Hash() {
 				branch = reference.Name().Short()
 				return storer.ErrStop
 			}
 			return nil
-		})
-		if branch != `` {
-			err = tags.ForEach(func(reference *plumbing.Reference) error {
-				err = commits.ForEach(func(commit *object.Commit) error {
-					if reference.Hash() == commit.Hash {
-						tag = reference.Name().Short()
-						return storer.ErrStop
-					}
-					return nil
-				})
-				return err
-			})
+		}); err != nil || branch == `` {
+			return err
+		}
+		var tagRefs []*plumbing.Reference
+		if err = tags.ForEach(func(reference *plumbing.Reference) error {
+			tagRefs = append(tagRefs, reference)
+			return nil
+		}); err != nil || len(tagRefs) == 0 {
+			return err
+		}
+		slices.Reverse(tagRefs)
+		for _, ref := range tagRefs {
+			if err = commits.ForEach(func(commit *object.Commit) error {
+				if ref.Hash() == commit.Hash {
+					tag = ref.Name().Short()
+					return storer.ErrStop
+				}
+				return nil
+			}); err == nil && tag != `` {
+				break
+			}
+		}
+		if tag != `` {
 			return storer.ErrStop
 		}
-		return err
+		return nil
 	})
 	return
 }

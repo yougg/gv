@@ -28,6 +28,7 @@ var (
 	ErrTagNotFound = errors.New(`tag not found`)
 
 	verReg = regexp.MustCompile(`(v?)(\d+)\.(\d+)\.(\d+)`)
+	devVer = regexp.MustCompile(`(v?)(\d+)\.(\d+)\.(\d+)[_.-](alpha|beta|pre|rc|dev|snapshot|nightly|canary|exp)`)
 )
 
 func init() {
@@ -314,11 +315,12 @@ func extractVersion(tag string, add ...bool) string {
 	if err != nil {
 		return tag
 	}
-	if len(add) > 0 && add[0] {
+	if len(add) > 0 && add[0] && !devVer.MatchString(tag) {
+		// skip developing version
 		patch++
 	}
 
-	// 构造新的版本号
+	// new version
 	version := `v` + match[2] + `.` + match[3] + `.` + strconv.Itoa(patch)
 	return version
 }

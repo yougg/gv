@@ -28,7 +28,7 @@ var (
 	ErrTagNotFound = errors.New(`tag not found`)
 
 	verReg = regexp.MustCompile(`(v?)(\d+)\.(\d+)\.(\d+)`)
-	devVer = regexp.MustCompile(`(v?)(\d+)\.(\d+)\.(\d+)[_.-](alpha|beta|pre|rc|dev|snapshot|nightly|canary|exp)`)
+	devVer = regexp.MustCompile(`(v?)(\d+)\.(\d+)\.(\d+)[_.-](alpha|beta|pre|rc|dev|build|snapshot|nightly|canary|exp)`)
 )
 
 func init() {

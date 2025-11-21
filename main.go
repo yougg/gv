@@ -13,11 +13,13 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/plumbing/storer"
+	"golang.org/x/mod/semver"
 )
 
 var (
@@ -27,7 +29,7 @@ var (
 
 	ErrTagNotFound = errors.New(`tag not found`)
 
-	verReg = regexp.MustCompile(`(v?)(\d+)\.(\d+)\.(\d+)`)
+	verReg = regexp.MustCompile(`^(v?)(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$`)
 	devVer = regexp.MustCompile(`(v?)(\d+)\.(\d+)\.(\d+)[_.-](alpha|beta|pre|rc|dev|build|snapshot|nightly|canary|exp)`)
 )
 
@@ -130,8 +132,8 @@ func Version(gitRoot string) {
 	var version string
 	if tag != `` {
 		version = extractVersion(tag)
-		fmt.Print(tag)
 		if !all {
+			fmt.Print(tag)
 			return
 		}
 	}
@@ -157,7 +159,7 @@ func Version(gitRoot string) {
 		slog.Error("get commit object", `err`, err)
 		return
 	}
-	date := commit.Committer.When.Format(`20060102150405`)
+	date := commit.Committer.When.Format(time.RFC3339)
 	if version == `` {
 		version = fmt.Sprintf("%s-%s-%s", ref, date, head.Hash().String()[:12])
 	}
@@ -173,7 +175,7 @@ func Version(gitRoot string) {
 	}
 }
 
-// findTag get tag at HEAD if it exists
+// findTag get tag points to HEAD if it exists
 func findTag(repo *git.Repository, head plumbing.Hash) (tag string, err error) {
 	tags, err := repo.Tags()
 	if err != nil {
@@ -182,9 +184,17 @@ func findTag(repo *git.Repository, head plumbing.Hash) (tag string, err error) {
 	}
 	var tagNames []string
 	if err = tags.ForEach(func(reference *plumbing.Reference) error {
+		// handling lightweight tags (pointing directly to commit)
 		if reference.Hash() == head {
 			tagNames = append(tagNames, reference.Name().Short())
-			return storer.ErrStop
+			return nil
+		}
+		// handling annotated tags pointing to tag objects
+		if ref, err := repo.TagObject(reference.Hash()); err == nil {
+			commit, err := ref.Commit()
+			if err == nil && commit.Hash == head {
+				tagNames = append(tagNames, reference.Name().Short())
+			}
 		}
 		return nil
 	}); err != nil {
@@ -195,6 +205,7 @@ func findTag(repo *git.Repository, head plumbing.Hash) (tag string, err error) {
 		err = ErrTagNotFound
 		return
 	}
+	semver.Sort(tagNames)
 	slices.Reverse(tagNames)
 	tag = tagNames[0]
 	return
@@ -202,18 +213,18 @@ func findTag(repo *git.Repository, head plumbing.Hash) (tag string, err error) {
 	// fallback to run git command
 	//	1: git tag --points-at HEAD
 	//	2: git pack-refs; awk -F 'tags/' /$(git rev-parse HEAD)/'{print $2}' .git/packed-refs
-	//err = os.Chdir(filepath.Dir(gitRoot))
-	//if err != nil {
+	// err = os.Chdir(filepath.Dir(gitRoot))
+	// if err != nil {
 	//	slog.Error("change dir", `err`, err)
 	//	return
-	//}
-	//cmd := exec.Command(`sh`, `-c`, `git tag --points-at HEAD 2> /dev/null | sort -V | tail -1`)
-	//output, err := cmd.Output()
-	//if err != nil {
+	// }
+	// cmd := exec.Command(`sh`, `-c`, `git tag --points-at HEAD 2> /dev/null | sort -V | tail -1`)
+	// output, err := cmd.Output()
+	// if err != nil {
 	//	slog.Error("git cmd output", `err`, err)
 	//	return
-	//}
-	//tag = string(output)
+	// }
+	// tag = string(output)
 }
 
 // nearliestTag find the nearliest tag from given branch
@@ -263,6 +274,8 @@ func nearliestTag(repo *git.Repository, branch string) (tag string, err error) {
 			return nil
 		}
 		if len(tagNames) > 0 {
+			semver.Sort(tagNames)
+			slices.Reverse(tagNames)
 			tag = tagNames[0]
 		}
 		if tag != `` {
@@ -310,17 +323,29 @@ func extractVersion(tag string, add ...bool) string {
 		return tag
 	}
 
-	// increment patch version number
-	patch, err := strconv.Atoi(match[4])
-	if err != nil {
-		return tag
-	}
-	if len(add) > 0 && add[0] && !devVer.MatchString(tag) {
-		// skip developing version
-		patch++
+	// extract the main version number
+	major := match[2]
+	minor := match[3]
+	patch := match[4]
+	preRelease := match[5]
+	buildMetadata := match[6]
+
+	// incremental patch version number
+	if len(add) > 0 && add[0] && preRelease == "" {
+		p, err := strconv.Atoi(patch)
+		if err == nil {
+			patch = strconv.Itoa(p + 1)
+		}
 	}
 
-	// new version
-	version := `v` + match[2] + `.` + match[3] + `.` + strconv.Itoa(patch)
+	// build a new version number
+	version := `v` + major + `.` + minor + `.` + patch
+	if preRelease != `` {
+		version += `-` + preRelease
+	}
+	if buildMetadata != `` {
+		version += `+` + buildMetadata
+	}
+
 	return version
 }
